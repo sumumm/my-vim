@@ -112,3 +112,23 @@ branch:
             required: false
             type: input
             default: Dockerfile
+  # 仅在 main 分支详情页显示：手动检查并同步内置插件上游更新
+  - reg: '^main$'
+    buttons:
+      - name: 同步内置插件
+        description: 立即检查 NERDTree 与 vim-plug 的上游提交，默认同步源码并自动提交推送
+        event: web_trigger_sync_bundled_plugins
+        isDefault: false
+        inputs:
+          # 环境变量名 DRY_RUN_INPUT，由 scripts/sync-plugins.sh 识别为试运行模式
+          DRY_RUN_INPUT:
+            name: 试运行
+            description: 选「是」只输出差异清单，不改文件、不提交
+            type: select
+            required: false
+            default: 'false'
+            options:
+              - name: 否（同步并提交推送）
+                value: 'false'
+              - name: 是（只看差异）
+                value: 'true'

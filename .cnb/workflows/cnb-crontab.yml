@@ -8,3 +8,11 @@ main:
       stages:
         - name: sync upstream and commit
           script: bash scripts/sync-plugins.sh
+
+  # 页面按钮「同步内置插件」触发，按钮定义见 .cnb/web_trigger.yml
+  # 勾选「试运行」时 DRY_RUN_INPUT=true，脚本只输出差异不写文件
+  web_trigger_sync_bundled_plugins:
+    - name: sync-bundled-plugins
+      stages:
+        - name: sync upstream and commit
+          script: bash scripts/sync-plugins.sh
