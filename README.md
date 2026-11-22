@@ -14,12 +14,22 @@ cd ~/my-vim
 
 之后直接 `vim` 打开，左侧自动出现目录树。内置插件走 Vim 8 原生 `pack` 机制，不需要 `:PlugInstall`。
 
+已经装过的机器同步仓库更新，只需三条命令：
+
+```bash
+git pull                  # 拿到最新的 vimrc 模板与内置插件
+./vim-plug.sh config      # 按标记块覆盖 ~/.vimrc（块外配置保留，自动备份）
+./vim-plug.sh link        # 接入新增或变更的内置插件软链
+```
+
+`./vim-plug.sh status` 可以先确认配置块是否已过期、软链是否缺失或悬空。
+
 ## 命令速查
 
 | 命令 | 说明 |
 |---|---|
 | `./vim-plug.sh link` | 把内置插件软链到 `~/.vim/pack` |
-| `./vim-plug.sh --with-config` | 安装 vim-plug，并把 `vimrc` 追加到 `~/.vimrc` |
+| `./vim-plug.sh --with-config` | 安装 vim-plug，并把 `vimrc` 写入 `~/.vimrc`（首次追加；已有管理块则跳过，更新用 `config`） |
 | `./vim-plug.sh config` | 用最新 `vimrc` 模板覆盖已有配置块（不动插件与软链） |
 | `./vim-plug.sh plugins` | 联网安装 `vimrc` 中声明的插件 |
 | `./vim-plug.sh status` | 查看 plug.vim、内置组件软链、配置块与版本 |
