@@ -115,6 +115,7 @@ Usage: ${SCRIPT_NAME} [COMMAND] [OPTIONS]
 
 Commands:
   install        安装 vim-plug（默认命令，优先使用仓库内置的 plug.vim）
+  config         用最新 vimrc 模板覆盖或写入配置管理块（不动 plug.vim 与软链）
   link           把仓库内置插件软链到 Vim/Neovim 的 pack 目录，离线可用
   plugins        执行 :PlugInstall，安装 vimrc 中声明的插件
   uninstall      卸载 vim-plug，并移除脚本写入的配置块
@@ -125,6 +126,7 @@ Options:
   --nvim         只处理 Neovim
                  （都不指定时，检测到哪个就处理哪个）
   --with-config  把仓库内的 vimrc 模板追加到 ~/.vimrc 或 init.vim（按标记块）
+                 已有管理块时会跳过，需要覆盖更新请用 config 子命令
   --online       忽略仓库内置的 plug.vim，强制联网下载
   --mirror       优先使用国内加速镜像下载 plug.vim
   --purge        卸载时一并删除插件目录（~/.vim/plugged 等）
@@ -136,6 +138,7 @@ Environment:
 
 Examples:
   ./${SCRIPT_NAME} --with-config      # 安装 vim-plug 并写入配置
+  ./${SCRIPT_NAME} config             # 用最新模板刷新已有配置块（不动其他）
   ./${SCRIPT_NAME} link               # 接入仓库内置插件（离线）
   ./${SCRIPT_NAME} plugins            # 联网安装 vimrc 中声明的插件
   ./${SCRIPT_NAME} --nvim --with-config
@@ -309,6 +312,68 @@ remove_config() {
     return 0
 }
 
+# 用最新模板替换已有管理块，块外内容原样保留
+replace_config_block() {
+    local rc_file="$1"
+    local backup="${rc_file}.bak.$(date +%Y%m%d-%H%M%S)"
+    local tmp_file="${rc_file}.tmp.$$"
+
+    execute cp -f "${rc_file}" "${backup}" || return 1
+    info "existing config backed up to ${backup}"
+
+    awk -v b="${RC_BEGIN_MARKER}" -v e="${RC_END_MARKER}" -v t="${VIMRC_TEMPLATE}" '
+        $0 == b {
+            print
+            while ((getline line < t) > 0) { print line }
+            close(t)
+            skip = 1
+            next
+        }
+        skip && $0 == e { skip = 0 }
+        !skip { print }
+    ' "${rc_file}" > "${tmp_file}" && execute mv -f "${tmp_file}" "${rc_file}" || {
+        rm -f "${tmp_file}"
+        return 1
+    }
+    return 0
+}
+
+# 只处理配置：有管理块就整体替换，没有就追加，不碰 plug.vim 与插件目录
+config_one() {
+    local editor="$1"
+    local rc_file="$2"
+
+    if [ ! -f "${VIMRC_TEMPLATE}" ]; then
+        error "config template not found: ${VIMRC_TEMPLATE}"
+        info "put a vimrc file next to this script, or set VIMRC_TEMPLATE=/path/to/vimrc"
+        return 1
+    fi
+
+    if [ "${editor}" = "nvim" ] && [ -f "${NVIM_INIT_LUA}" ]; then
+        warning "found ${NVIM_INIT_LUA}, init.vim will be ignored by Neovim."
+        warning "please update init.lua manually."
+        return 1
+    fi
+
+    if [ -f "${rc_file}" ] && grep -qF "${RC_BEGIN_MARKER}" "${rc_file}"; then
+        step "refreshing managed config block in ${rc_file}"
+        replace_config_block "${rc_file}" || return 1
+        success "config block refreshed in ${rc_file}"
+        return 0
+    fi
+
+    # 用户手动 cp 过模板的场合，没有标记，避免再追加一份
+    if [ -f "${rc_file}" ] && grep -qE '^[[:space:]]*call[[:space:]]+plug#begin' "${rc_file}"; then
+        warning "${rc_file} already contains plug#begin() without markers, skipped."
+        info "overwrite it directly if you manage the file yourself: cp ${VIMRC_TEMPLATE} ${rc_file}"
+        return 0
+    fi
+
+    step "appending config to ${rc_file}"
+    write_config "${rc_file}" || return 1
+    return 0
+}
+
 # ========================================================
 # 单个编辑器安装
 install_one() {
@@ -360,6 +425,42 @@ do_install() {
     success "vim-plug installation done."
     info "next step: run '${SCRIPT_NAME} plugins' to install declared plugins"
     info "or inside vim:  :PlugInstall"
+    return 0
+}
+
+# ========================================================
+# 只同步配置：用最新模板覆盖已有管理块，或首次写入
+do_config() {
+    local handled=0
+
+    if [ "${TARGET_VIM}" -eq 0 ] && [ "${TARGET_NVIM}" -eq 0 ]; then
+        detect_targets
+    fi
+
+    if [ "${TARGET_VIM}" -eq 1 ]; then
+        if command -v vim &>/dev/null; then
+            config_one "vim" "${VIMRC}" || return 1
+            handled=1
+        else
+            warning "vim not found, skipped."
+        fi
+    fi
+
+    if [ "${TARGET_NVIM}" -eq 1 ]; then
+        if command -v nvim &>/dev/null; then
+            config_one "nvim" "${NVIM_INIT}" || return 1
+            handled=1
+        else
+            warning "nvim not found, skipped."
+        fi
+    fi
+
+    if [ ${handled} -eq 0 ]; then
+        error "no editor selected, use --vim or --nvim."
+        return 1
+    fi
+
+    info "config only: plug.vim and bundled pack symlinks are untouched."
     return 0
 }
 
@@ -487,17 +588,25 @@ link_pack_one() {
 }
 
 # 移除指向本仓库的软链，只删自己创建的，避免误伤用户自己的安装
+# 判定依据是软链解析后落在本仓库 pack/vendor/start/ 内，因此插件已从仓库下线的
+# 悬空软链也会被清掉；指向别处的软链和用户自建的真目录一律不动
 unlink_pack_one() {
     local pack_dest="$1"
-    local src dest
+    local link target src_root
     local count=0
 
-    for src in "${PACK_SRC}/vendor/start"/*; do
-        [ -d "${src}" ] || continue
-        dest="${pack_dest}/vendor/start/$(basename "${src}")"
-        if [ -L "${dest}" ] && [ "$(readlink -f "${dest}")" = "$(readlink -f "${src}")" ]; then
-            execute rm -f "${dest}" && count=$((count + 1))
-        fi
+    [ -d "${pack_dest}/vendor/start" ] || return 0
+    src_root=$(readlink -f "${PACK_SRC}/vendor/start") || return 0
+
+    for link in "${pack_dest}/vendor/start"/*; do
+        [ -L "${link}" ] || continue
+        # 解析后目标仍指向本仓库内置插件目录（含已下线的悬空软链）才处理
+        target=$(readlink -f "${link}" 2>/dev/null) || continue
+        case "${target}" in
+            "${src_root}"/*) ;;
+            *) continue ;;
+        esac
+        execute rm -f "${link}" && count=$((count + 1))
     done
 
     if [ ${count} -gt 0 ]; then
@@ -622,6 +731,7 @@ do_echo_menu() {
     echo "================================================="
     echo -e "commands:"
     echo -e "  install     安装 vim-plug（默认命令）"
+    echo -e "  config      用最新模板覆盖/写入配置管理块"
     echo -e "  link        接入仓库内置插件（离线，走 Vim 原生 pack）"
     echo -e "  plugins     安装 vimrc 中声明的插件（:PlugInstall）"
     echo -e "  uninstall   卸载 vim-plug 并移除配置块"
@@ -647,6 +757,7 @@ ORIGINAL_ARGS=("$@")
 while [ $# -gt 0 ]; do
     case "$1" in
         install)        ACTION="install" ;;
+        config|conf)    ACTION="config" ;;
         link|link-pack) ACTION="link" ;;
         plugins|pluginstall|plug) ACTION="plugins" ;;
         uninstall|remove) ACTION="uninstall" ;;
@@ -675,6 +786,10 @@ do_echo_menu "${ORIGINAL_ARGS[@]}"
 case "${ACTION}" in
     install)
         do_install
+        ret=$?
+        ;;
+    config)
+        do_config
         ret=$?
         ;;
     link)

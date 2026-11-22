@@ -20,9 +20,10 @@ cd ~/my-vim
 |---|---|
 | `./vim-plug.sh link` | 把内置插件软链到 `~/.vim/pack` |
 | `./vim-plug.sh --with-config` | 安装 vim-plug，并把 `vimrc` 追加到 `~/.vimrc` |
+| `./vim-plug.sh config` | 用最新 `vimrc` 模板覆盖已有配置块（不动插件与软链） |
 | `./vim-plug.sh plugins` | 联网安装 `vimrc` 中声明的插件 |
 | `./vim-plug.sh status` | 查看已装插件与版本 |
-| `./vim-plug.sh uninstall` | 卸载 vim-plug、配置块与内置插件软链 |
+| `./vim-plug.sh uninstall` | 卸载 vim-plug、配置块与内置插件软链（含已下线插件的悬空软链） |
 
 ## 内置组件版本
 
