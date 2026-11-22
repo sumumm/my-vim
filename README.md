@@ -29,6 +29,7 @@ cd ~/my-vim
 <!-- BEGIN AUTOGEN:components -->
 | 组件 | 上游仓库 | 跟踪 | 提交 | 日期 |
 |---|---|---|---|---|
+| lightline | [lightline.vim](https://github.com/itchyny/lightline.vim) | master | [`255f61d`](https://github.com/itchyny/lightline.vim/commit/255f61db1a4cc36ee11eb479261d6bc471ed0819) | 2026-10-06 |
 | nerdtree | [nerdtree](https://github.com/preservim/nerdtree) | master | [`690d061`](https://github.com/preservim/nerdtree/commit/690d061b591525890f1471c6675bcb5bdc8cdff9) | 2025-09-26 |
 | vim-plug | [vim-plug](https://github.com/junegunn/vim-plug) | master | [`4c4e56b`](https://github.com/junegunn/vim-plug/commit/4c4e56b5f7384369927a075804b6a17de7644edd) | 2026-11-07 |
 <!-- END AUTOGEN:components -->

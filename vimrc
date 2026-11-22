@@ -35,6 +35,21 @@ nnoremap <silent> <C-f> :NERDTreeFind<CR>
 " 无参数启动时自动打开文件树；NERDTree 未安装则退回 netrw
 autocmd VimEnter * if argc() == 0 && exists(':NERDTree') == 2 | NERDTree | wincmd p | endif
 
+" ---------------------------------------------------------------- 状态栏
+" lightline 由 Vim 8 原生 pack 加载，配置需在插件加载前写入；
+" 用 packpath 判断是否已 link，未接入时不设置 noshowmode，避免看不到模式
+if !empty(globpath(&packpath, 'pack/vendor/start/lightline'))
+    set noshowmode
+
+    let g:lightline = {
+        \ 'colorscheme': 'wombat',
+        \ 'active': {
+        \   'left': [['mode', 'paste'], ['readonly', 'filename', 'modified']],
+        \   'right': [['lineinfo'], ['percent'], ['fileformat', 'fileencoding', 'filetype']]
+        \ },
+        \ }
+endif
+
 " ---------------------------------------------------------------- netrw 兜底
 let g:netrw_banner       = 0
 let g:netrw_liststyle    = 3
