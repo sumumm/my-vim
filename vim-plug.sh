@@ -119,7 +119,7 @@ Commands:
   link           把仓库内置插件软链到 Vim/Neovim 的 pack 目录，离线可用
   plugins        执行 :PlugInstall，安装 vimrc 中声明的插件
   uninstall      卸载 vim-plug，并移除脚本写入的配置块
-  status         查看 plug.vim 与插件目录状态
+  status         查看 plug.vim、内置组件软链、配置块与插件目录状态
 
 Options:
   --vim          只处理 Vim
@@ -692,34 +692,140 @@ do_uninstall() {
 
 # ========================================================
 # 状态
+
+# 内置插件在某个编辑器的 pack 目录中的接入状态
+pack_link_state() {
+    local name="$1"
+    local pack_dest="$2"
+    local src="${PACK_SRC}/vendor/start/${name}"
+    local dest="${pack_dest}/vendor/start/${name}"
+
+    if [ -L "${dest}" ]; then
+        if [ "$(readlink -f "${dest}")" = "$(readlink -f "${src}")" ]; then
+            echo "已接入"
+        else
+            echo "指向别处"
+        fi
+    elif [ -d "${dest}" ]; then
+        echo "真实目录"
+    else
+        echo "未接入"
+    fi
+}
+
+# 列出指向本仓库、但源码已从仓库下线的悬空软链
+list_stale_pack_links() {
+    local pack_dest="$1"
+    local link target src_root
+
+    [ -d "${pack_dest}/vendor/start" ] || return 0
+    src_root=$(readlink -f "${PACK_SRC}/vendor/start") || return 0
+
+    for link in "${pack_dest}/vendor/start"/*; do
+        [ -L "${link}" ] || continue
+        target=$(readlink -f "${link}" 2>/dev/null) || continue
+        case "${target}" in
+            "${src_root}"/*) ;;
+            *) continue ;;
+        esac
+        [ -d "${target}" ] && continue
+        printf '    - %s（悬空，原始目标 %s）\n' "${link}" "${target}"
+    done
+    return 0
+}
+
+# 配置文件中管理块与模板的比对结果
+config_block_state() {
+    local rc_file="$1"
+    local blk tpl
+
+    if [ ! -f "${rc_file}" ]; then
+        echo "文件不存在"
+        return 0
+    fi
+    if ! grep -qF "${RC_BEGIN_MARKER}" "${rc_file}" 2>/dev/null; then
+        echo "无管理块（手动维护）"
+        return 0
+    fi
+    if [ ! -f "${VIMRC_TEMPLATE}" ]; then
+        echo "有管理块，模板缺失无法比对"
+        return 0
+    fi
+
+    blk=$(mktemp) && tpl=$(mktemp) || { echo "有管理块"; return 0; }
+    awk -v b="${RC_BEGIN_MARKER}" -v e="${RC_END_MARKER}" '
+        $0 == b { skip = 1; next }
+        skip && $0 == e { skip = 0; next }
+        skip { print }
+    ' "${rc_file}" > "${blk}"
+    # 统一去掉尾部空行后再比较
+    printf '%s\n' "$(cat "${blk}")" > "${blk}.norm"
+    printf '%s\n' "$(cat "${VIMRC_TEMPLATE}")" > "${tpl}.norm"
+
+    if cmp -s "${blk}.norm" "${tpl}.norm"; then
+        echo "管理块与模板一致"
+    else
+        echo "管理块与模板不一致，可用 ${SCRIPT_NAME} config 刷新"
+    fi
+    rm -f "${blk}" "${blk}.norm" "${tpl}" "${tpl}.norm"
+    return 0
+}
+
 show_status() {
-    local name dest dir
+    local name dir count vim_ver nvim_ver stale
     step "vim-plug status"
 
     echo ""
-    echo -e "vim plug.vim : $( [ -f "${VIM_PLUG_DEST}" ] && echo "${VIM_PLUG_DEST} ($(wc -c < "${VIM_PLUG_DEST}") bytes)" || echo "not installed" )"
-    echo -e "nvim plug.vim: $( [ -f "${NVIM_PLUG_DEST}" ] && echo "${NVIM_PLUG_DEST} ($(wc -c < "${NVIM_PLUG_DEST}") bytes)" || echo "not installed" )"
+    echo -e "plug.vim"
+    echo -e "  vim : $( [ -f "${VIM_PLUG_DEST}" ] && echo "${VIM_PLUG_DEST} ($(wc -c < "${VIM_PLUG_DEST}") bytes)" || echo "not installed" )"
+    echo -e "  nvim: $( [ -f "${NVIM_PLUG_DEST}" ] && echo "${NVIM_PLUG_DEST} ($(wc -c < "${NVIM_PLUG_DEST}") bytes)" || echo "not installed" )"
 
+    echo ""
+    echo -e "\e[96m内置组件（${PACK_SRC}/vendor/start，Vim 原生 pack 加载，与 vim-plug 无关）\e[0m"
+    for dir in "${PACK_SRC}/vendor/start"/*; do
+        [ -d "${dir}" ] || continue
+        name=$(basename "${dir}")
+        printf '  - %-14s vim %s / nvim %s\n' "${name}" \
+            "$(pack_link_state "${name}" "${VIM_PACK_DEST}")" \
+            "$(pack_link_state "${name}" "${NVIM_PACK_DEST}")"
+    done
+    stale="$(list_stale_pack_links "${VIM_PACK_DEST}")$(list_stale_pack_links "${NVIM_PACK_DEST}")"
+    if [ -z "${stale}" ]; then
+        echo -e "  残留软链: 无"
+    else
+        echo -e "  残留软链:"
+        printf '%s\n' "${stale}"
+    fi
+
+    echo ""
+    echo -e "\e[96m配置文件\e[0m"
+    echo -e "  vim : ${VIMRC}（$(config_block_state "${VIMRC}")）"
+    echo -e "  nvim: ${NVIM_INIT}（$(config_block_state "${NVIM_INIT}")）"
+
+    echo ""
+    echo -e "\e[96mvim-plug 插件目录（:PlugInstall 下载，与内置组件无关）\e[0m"
     for name in vim nvim; do
         if [ "${name}" = "vim" ]; then
             dir="${VIM_PLUGGED}"
         else
             dir="${NVIM_PLUGGED}"
         fi
-        echo ""
         if [ -d "${dir}" ]; then
-            echo -e "${name} plugins (${dir}):"
-            local count=$(find "${dir}" -mindepth 1 -maxdepth 1 -type d | wc -l)
-            find "${dir}" -mindepth 1 -maxdepth 1 -type d -printf '  - %f\n' 2>/dev/null | sort
-            echo -e "  total: ${count}, size: $(du -sh "${dir}" 2>/dev/null | cut -f1)"
+            count=$(find "${dir}" -mindepth 1 -maxdepth 1 -type d | wc -l)
+            echo -e "  ${dir}:"
+            find "${dir}" -mindepth 1 -maxdepth 1 -type d -printf '    - %f\n' 2>/dev/null | sort
+            echo -e "    total: ${count}, size: $(du -sh "${dir}" 2>/dev/null | cut -f1)"
         else
-            echo -e "${name} plugins: directory not found (${dir})"
+            echo -e "  ${dir}: 目录不存在"
         fi
     done
 
     echo ""
-    echo -e "vim : $(vim --version 2>/dev/null | head -n 1 || echo 'not found')"
-    echo -e "nvim: $(nvim --version 2>/dev/null | head -n 1 || echo 'not found')"
+    echo -e "\e[96m版本\e[0m"
+    vim_ver=$(vim --version 2>/dev/null | head -n 1)
+    nvim_ver=$(nvim --version 2>/dev/null | head -n 1)
+    echo -e "  vim : ${vim_ver:-not found}"
+    echo -e "  nvim: ${nvim_ver:-not found}"
     return 0
 }
 
