@@ -255,16 +255,21 @@ main() {
         updated=$((updated + 1))
     done < "${MANIFEST}"
 
-    if [ ${updated} -eq 0 ]; then
-        success "all bundled components are up to date."
+    if [ ${DRY_RUN} -eq 1 ]; then
+        if [ ${updated} -eq 0 ]; then
+            success "all bundled components are up to date."
+        else
+            info "dry-run finished, ${updated} component(s) would be updated."
+        fi
         return 0
     fi
 
+    # 即便没有组件更新，也保证 README 与清单一致（清单可能被手工改过）
     step "refreshing README version table"
     "${REPO_ROOT}/scripts/update-readme.sh" || return 1
 
-    if [ ${DRY_RUN} -eq 1 ]; then
-        info "dry-run finished, ${updated} component(s) would be updated."
+    if [ ${updated} -eq 0 ] && git diff --quiet -- pack vendor README.md; then
+        success "all bundled components are up to date."
         return 0
     fi
 
