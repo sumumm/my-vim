@@ -45,19 +45,23 @@ my-vim/
 │   ├── plugins.tsv               内置组件清单（上游地址、分支、提交）
 │   └── vendor/start/nerdtree/    NERDTree 源码，与上游逐文件一致
 ├── vendor/plug.vim               vim-plug 本体
-└── scripts/update-readme.sh      刷新本文件的版本表
+├── scripts/
+│   ├── sync-plugins.sh           同步上游、回写清单并提交
+│   └── update-readme.sh          刷新本文件的版本表
+└── .cnb/workflows/cnb-crontab.yml  每日自动同步的定时任务
 ```
 
 ## 更新内置组件
 
 ```bash
-# 1. 按 pack/plugins.tsv 同步上游最新源码到本地目录
-# 2. 更新 plugins.tsv 中的 commit 与 date
-# 3. 刷新 README 版本表
-scripts/update-readme.sh
+scripts/sync-plugins.sh --dry-run   # 只检查上游是否有新提交，不改动工作区
+scripts/sync-plugins.sh             # 同步源码 + 回写 plugins.tsv + 刷新 README + 提交推送
+scripts/sync-plugins.sh --no-push   # 同步并提交，但不推送
 ```
 
-计划通过 CNB 流水线每日检查上游更新，有变更时自动提交。
+CNB 流水线见 `.cnb/workflows/cnb-crontab.yml`，每天 03:30（Asia/Shanghai）自动执行一次，没有更新时不产生提交。
+
+只想刷新版本表、不检查上游时，单独执行 `scripts/update-readme.sh`。
 
 ## 依赖
 
