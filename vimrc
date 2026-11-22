@@ -36,18 +36,23 @@ nnoremap <silent> <C-f> :NERDTreeFind<CR>
 autocmd VimEnter * if argc() == 0 && exists(':NERDTree') == 2 | NERDTree | wincmd p | endif
 
 " ---------------------------------------------------------------- 状态栏
-" lightline 由 Vim 8 原生 pack 加载，配置需在插件加载前写入；
+" airline 由 Vim 8 原生 pack 加载，配置需在插件加载前写入；
 " 用 packpath 判断是否已 link，未接入时不设置 noshowmode，避免看不到模式
-if !empty(globpath(&packpath, 'pack/vendor/start/lightline'))
+if !empty(globpath(&packpath, 'pack/vendor/start/vim-airline'))
     set noshowmode
 
-    let g:lightline = {
-        \ 'colorscheme': 'wombat',
-        \ 'active': {
-        \   'left': [['mode', 'paste'], ['readonly', 'filename', 'modified']],
-        \   'right': [['lineinfo'], ['percent'], ['fileformat', 'fileencoding', 'filetype']]
-        \ },
-        \ }
+    let g:airline_powerline_fonts = 0                  " 终端没装 Nerd Font，用 Unicode 分隔符
+    let g:airline_theme = 'dark'                       " airline 自带主题，不需要 vim-airline-themes
+    let g:airline#extensions#tabline#enabled = 1       " 顶部 buffer 列表，airline 的招牌功能
+    let g:airline#extensions#tabline#formatter = 'unique_tail_improved'
+    let g:airline#extensions#whitespace#enabled = 0
+
+    " 默认行号符号是 ㏑ / ≡ / ℅，换成朴素的 1/37:1；
+    " 必须先建字典再赋值，此时 g:airline_symbols 还不存在，直接赋值会 E121 中断后续配置
+    let g:airline_symbols = get(g:, 'airline_symbols', {})
+    let g:airline_symbols.linenr = ''
+    let g:airline_symbols.maxlinenr = ''
+    let g:airline_symbols.colnr = ':'
 endif
 
 " ---------------------------------------------------------------- netrw 兜底
