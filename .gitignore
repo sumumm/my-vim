@@ -1,0 +1,5 @@
+# 环境 safe-delete 产生的回收站目录
+.Trash-0/
+
+# vim 加载插件时生成的帮助标签（软链会写回仓库）
+pack/**/doc/tags

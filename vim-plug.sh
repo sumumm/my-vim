@@ -69,6 +69,14 @@ PLUG_MIRRORS=(
     "https://ghproxy.net/${PLUG_URL_DEFAULT}"
 )
 
+# 仓库内置资源，用于完全离线安装
+#   vendor/plug.vim           : vim-plug 本体
+#   pack/vendor/start/<name>/ : 插件源码，遵循 Vim 8 原生 pack 目录结构
+PLUG_LOCAL="${SCRIPT_ABSOLUTE_PATH}/vendor/plug.vim"
+PACK_SRC="${SCRIPT_ABSOLUTE_PATH}/pack"
+VIM_PACK_DEST="${HOME}/.vim/pack"
+NVIM_PACK_DEST="${XDG_DATA_HOME:-${HOME}/.local/share}/nvim/site/pack"
+
 # 安装位置（与 vim-plug 官方 README 一致）
 VIM_PLUG_DEST="${HOME}/.vim/autoload/plug.vim"
 NVIM_PLUG_DEST="${XDG_DATA_HOME:-${HOME}/.local/share}/nvim/site/autoload/plug.vim"
@@ -97,6 +105,7 @@ TARGET_NVIM=0
 WITH_CONFIG=0
 USE_MIRROR=0
 PURGE=0
+USE_LOCAL_PLUG=1
 
 # ========================================================
 # 用法说明
@@ -105,7 +114,8 @@ usage() {
 Usage: ${SCRIPT_NAME} [COMMAND] [OPTIONS]
 
 Commands:
-  install        安装 vim-plug（默认命令）
+  install        安装 vim-plug（默认命令，优先使用仓库内置的 plug.vim）
+  link           把仓库内置插件软链到 Vim/Neovim 的 pack 目录，离线可用
   plugins        执行 :PlugInstall，安装 vimrc 中声明的插件
   uninstall      卸载 vim-plug，并移除脚本写入的配置块
   status         查看 plug.vim 与插件目录状态
@@ -115,6 +125,7 @@ Options:
   --nvim         只处理 Neovim
                  （都不指定时，检测到哪个就处理哪个）
   --with-config  把仓库内的 vimrc 模板追加到 ~/.vimrc 或 init.vim（按标记块）
+  --online       忽略仓库内置的 plug.vim，强制联网下载
   --mirror       优先使用国内加速镜像下载 plug.vim
   --purge        卸载时一并删除插件目录（~/.vim/plugged 等）
   -h, --help     显示本帮助
@@ -124,10 +135,10 @@ Environment:
   VIMRC_TEMPLATE  自定义配置模板路径，默认取脚本同目录下的 vimrc
 
 Examples:
-  ./${SCRIPT_NAME}
+  ./${SCRIPT_NAME} --with-config      # 安装 vim-plug 并写入配置
+  ./${SCRIPT_NAME} link               # 接入仓库内置插件（离线）
+  ./${SCRIPT_NAME} plugins            # 联网安装 vimrc 中声明的插件
   ./${SCRIPT_NAME} --nvim --with-config
-  ./${SCRIPT_NAME} --mirror
-  ./${SCRIPT_NAME} plugins
   ./${SCRIPT_NAME} uninstall --purge
 EOF
 }
@@ -180,6 +191,21 @@ verify_plug() {
 # 按候选列表逐个尝试，第一个成功即返回
 fetch_plug() {
     local dest="$1"
+
+    # 优先使用仓库内置的 plug.vim，无网络也能安装
+    if [ ${USE_LOCAL_PLUG} -eq 1 ] && [ -f "${PLUG_LOCAL}" ] && verify_plug "${PLUG_LOCAL}"; then
+        step "using bundled plug.vim: ${PLUG_LOCAL}"
+        execute mkdir -p "$(dirname "${dest}")" || return 1
+        if [ -f "${dest}" ]; then
+            local backup="${dest}.bak.$(date +%Y%m%d-%H%M%S)"
+            execute cp -f "${dest}" "${backup}" || return 1
+            info "existing plug.vim backed up to ${backup}"
+        fi
+        execute cp -f "${PLUG_LOCAL}" "${dest}" || return 1
+        success "plug.vim installed at ${dest} (offline, from bundled copy)"
+        return 0
+    fi
+
     local tmp_urls=()
     [ -n "${PLUG_URL}" ] && tmp_urls+=("${PLUG_URL}")
     if [ ${USE_MIRROR} -eq 1 ]; then
@@ -420,6 +446,101 @@ do_plug_install() {
 }
 
 # ========================================================
+# 把仓库内置插件软链到编辑器的 pack 目录，实现离线加载
+link_pack_one() {
+    local editor="$1"
+    local pack_dest="$2"
+
+    if [ ! -d "${PACK_SRC}/vendor/start" ]; then
+        error "bundled pack not found: ${PACK_SRC}/vendor/start"
+        return 1
+    fi
+
+    local src dest base
+    local count=0
+    for src in "${PACK_SRC}/vendor/start"/*; do
+        [ -d "${src}" ] || continue
+        base=$(basename "${src}")
+        dest="${pack_dest}/vendor/start/${base}"
+        execute mkdir -p "$(dirname "${dest}")" || return 1
+
+        # 已存在且不是软链时不动它，避免覆盖用户自己的安装
+        if [ -e "${dest}" ] && [ ! -L "${dest}" ]; then
+            warning "${dest} exists and is not a symlink, skipped (remove it manually)."
+            continue
+        fi
+        if [ -L "${dest}" ]; then
+            execute rm -f "${dest}" || return 1
+        fi
+        execute ln -s "${src}" "${dest}" || return 1
+        info "${editor}: ${dest} -> ${src}"
+        count=$((count + 1))
+    done
+
+    if [ ${count} -eq 0 ]; then
+        warning "no bundled plugin linked for ${editor}."
+        return 1
+    fi
+
+    success "${count} bundled plugin(s) linked for ${editor} (${pack_dest})"
+    return 0
+}
+
+# 移除指向本仓库的软链，只删自己创建的，避免误伤用户自己的安装
+unlink_pack_one() {
+    local pack_dest="$1"
+    local src dest
+    local count=0
+
+    for src in "${PACK_SRC}/vendor/start"/*; do
+        [ -d "${src}" ] || continue
+        dest="${pack_dest}/vendor/start/$(basename "${src}")"
+        if [ -L "${dest}" ] && [ "$(readlink -f "${dest}")" = "$(readlink -f "${src}")" ]; then
+            execute rm -f "${dest}" && count=$((count + 1))
+        fi
+    done
+
+    if [ ${count} -gt 0 ]; then
+        info "removed ${count} bundled symlink(s) from ${pack_dest}"
+    fi
+    return 0
+}
+
+do_link() {
+    local handled=0
+
+    if [ "${TARGET_VIM}" -eq 0 ] && [ "${TARGET_NVIM}" -eq 0 ]; then
+        detect_targets
+    fi
+
+    if [ "${TARGET_VIM}" -eq 1 ]; then
+        if command -v vim &>/dev/null; then
+            link_pack_one "vim" "${VIM_PACK_DEST}" || return 1
+            handled=1
+        else
+            warning "vim not found, skipped."
+        fi
+    fi
+
+    if [ "${TARGET_NVIM}" -eq 1 ]; then
+        if command -v nvim &>/dev/null; then
+            link_pack_one "nvim" "${NVIM_PACK_DEST}" || return 1
+            handled=1
+        else
+            warning "nvim not found, skipped."
+        fi
+    fi
+
+    if [ ${handled} -eq 0 ]; then
+        error "no editor selected, use --vim or --nvim."
+        return 1
+    fi
+
+    info "bundled plugins load at editor startup, no network or :PlugInstall needed."
+    return 0
+}
+
+# ========================================================
 # 卸载
 do_uninstall() {
     local removed=0
@@ -438,6 +559,9 @@ do_uninstall() {
 
     remove_config "${VIMRC}" || return 1
     remove_config "${NVIM_INIT}" || return 1
+
+    unlink_pack_one "${VIM_PACK_DEST}"
+    unlink_pack_one "${NVIM_PACK_DEST}"
 
     if [ ${PURGE} -eq 1 ]; then
         local dir
@@ -498,6 +622,7 @@ do_echo_menu() {
     echo "================================================="
     echo -e "commands:"
     echo -e "  install     安装 vim-plug（默认命令）"
+    echo -e "  link        接入仓库内置插件（离线，走 Vim 原生 pack）"
     echo -e "  plugins     安装 vimrc 中声明的插件（:PlugInstall）"
     echo -e "  uninstall   卸载 vim-plug 并移除配置块"
     echo -e "  status      查看 plug.vim 与插件目录状态"
@@ -522,6 +647,7 @@ ORIGINAL_ARGS=("$@")
 while [ $# -gt 0 ]; do
     case "$1" in
         install)        ACTION="install" ;;
+        link|link-pack) ACTION="link" ;;
         plugins|pluginstall|plug) ACTION="plugins" ;;
         uninstall|remove) ACTION="uninstall" ;;
         status)         ACTION="status" ;;
@@ -529,6 +655,7 @@ while [ $# -gt 0 ]; do
         --nvim)         TARGET_NVIM=1 ;;
         --with-config)  WITH_CONFIG=1 ;;
         --mirror)       USE_MIRROR=1 ;;
+        --online)       USE_LOCAL_PLUG=0 ;;
         --purge)        PURGE=1 ;;
         -h|--help)      usage; exit 0 ;;
         *)
@@ -548,6 +675,10 @@ do_echo_menu "${ORIGINAL_ARGS[@]}"
 case "${ACTION}" in
     install)
         do_install
+        ret=$?
+        ;;
+    link)
+        do_link
         ret=$?
         ;;
     plugins)

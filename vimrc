@@ -1,7 +1,10 @@
 " =============================================================================
 " my-vim 基础配置片段
 " 作者: 苏木
-" 说明: 依赖 vim-plug，插件声明区写在下方，首次使用需执行 :PlugInstall
+" 说明:
+"   - NERDTree 已内置在仓库 pack/vendor/start/ 下，执行 ./vim-plug.sh link 后
+"     由 Vim 8 原生 pack 机制自动加载，离线可用，不需要 :PlugInstall
+"   - vim-plug 仅用于以后联网安装其他插件，未安装时本文件也能正常启动
 "
 " 用法:
 "   1) 单独使用: cp vimrc ~/.vimrc
@@ -10,13 +13,15 @@
 " =============================================================================
 
 " ---------------------------------------------------------------- 插件声明
-" 插件目录默认: Vim 为 ~/.vim/plugged，Neovim 为 ~/.local/share/nvim/plugged
-call plug#begin()
+" 内置插件无需在此声明；只有联网安装的插件才写进下面这段
+if !empty(globpath(&runtimepath, 'autoload/plug.vim'))
+    call plug#begin()
 
-Plug 'preservim/nerdtree'
-" Plug 'ryanoasis/vim-devicons'   " 文件图标：需要终端字体为 Nerd Font，否则每个文件前显示方块，按需启用
+    " Plug 'preservim/nerdtree'      " 已改为仓库内置，见 pack/vendor/start/nerdtree
+    " Plug 'ryanoasis/vim-devicons'  " 文件图标：需要终端字体为 Nerd Font，否则每个文件前显示方块
 
-call plug#end()
+    call plug#end()
+endif
 
 " ---------------------------------------------------------------- 文件树
 let NERDTreeShowHidden = 1
