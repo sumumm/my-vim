@@ -106,6 +106,7 @@ Usage: ${SCRIPT_NAME} [COMMAND] [OPTIONS]
 
 Commands:
   install        安装 vim-plug（默认命令）
+  plugins        执行 :PlugInstall，安装 vimrc 中声明的插件
   uninstall      卸载 vim-plug，并移除脚本写入的配置块
   status         查看 plug.vim 与插件目录状态
 
@@ -126,6 +127,7 @@ Examples:
   ./${SCRIPT_NAME}
   ./${SCRIPT_NAME} --nvim --with-config
   ./${SCRIPT_NAME} --mirror
+  ./${SCRIPT_NAME} plugins
   ./${SCRIPT_NAME} uninstall --purge
 EOF
 }
@@ -330,8 +332,90 @@ do_install() {
 
     echo ""
     success "vim-plug installation done."
-    info "next step: open vim and run  :PlugInstall"
-    info "or run non-interactively:  vim +PlugInstall +qall"
+    info "next step: run '${SCRIPT_NAME} plugins' to install declared plugins"
+    info "or inside vim:  :PlugInstall"
+    return 0
+}
+
+# ========================================================
+# 调用编辑器的 :PlugInstall 安装 vimrc 中声明的插件
+install_plugins_one() {
+    local editor="$1"
+    local rc_file="$2"
+    local plugged="$3"
+
+    if [ ! -f "${rc_file}" ]; then
+        warning "${rc_file} not found, run '${SCRIPT_NAME} install --with-config' first."
+        return 1
+    fi
+    if ! grep -qE "^[[:space:]]*Plug[[:space:]]+'" "${rc_file}"; then
+        warning "no Plug declaration found in ${rc_file}, nothing to install."
+        return 1
+    fi
+    if ! command -v git &>/dev/null; then
+        error "git not found, vim-plug needs git to clone plugins."
+        return 1
+    fi
+
+    step "installing declared plugins for ${editor} (headless :PlugInstall)..."
+    # 无 TTY 时编辑器会往 stderr 刷控制序列，统一丢弃；退出码也不完全可靠，最终以插件目录为准
+    printf '\e[95m[CMD] %s +PlugInstall +qall\e[0m\n' "${editor}" >&2
+    if command -v timeout &>/dev/null; then
+        timeout 600 "${editor}" +PlugInstall +qall </dev/null >/dev/null 2>&1
+    else
+        "${editor}" +PlugInstall +qall </dev/null >/dev/null 2>&1
+    fi
+    local ret=$?
+    if [ ${ret} -ne 0 ]; then
+        error "${editor} +PlugInstall exited with code ${ret} (timeout or startup error)."
+        return 1
+    fi
+
+    if [ ! -d "${plugged}" ]; then
+        warning "plugin directory not created: ${plugged}"
+        return 1
+    fi
+
+    local count=$(find "${plugged}" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    if [ ${count} -eq 0 ]; then
+        warning "no plugin installed, check network or run ':PlugInstall' inside ${editor}."
+        return 1
+    fi
+
+    success "${count} plugin(s) installed in ${plugged}"
+    find "${plugged}" -mindepth 1 -maxdepth 1 -type d -printf '  - %f\n' 2>/dev/null | sort
+    return 0
+}
+
+do_plug_install() {
+    local handled=0
+
+    if [ "${TARGET_VIM}" -eq 0 ] && [ "${TARGET_NVIM}" -eq 0 ]; then
+        detect_targets
+    fi
+
+    if [ "${TARGET_VIM}" -eq 1 ]; then
+        if command -v vim &>/dev/null; then
+            install_plugins_one "vim" "${VIMRC}" "${VIM_PLUGGED}" || return 1
+            handled=1
+        else
+            warning "vim not found, skipped."
+        fi
+    fi
+
+    if [ "${TARGET_NVIM}" -eq 1 ]; then
+        if command -v nvim &>/dev/null; then
+            install_plugins_one "nvim" "${NVIM_INIT}" "${NVIM_PLUGGED}" || return 1
+            handled=1
+        else
+            warning "nvim not found, skipped."
+        fi
+    fi
+
+    if [ ${handled} -eq 0 ]; then
+        error "no editor selected, use --vim or --nvim."
+        return 1
+    fi
     return 0
 }
 
@@ -412,6 +496,12 @@ do_echo_menu() {
     echo "================================================="
     echo -e " vim-plug installer"
     echo "================================================="
+    echo -e "commands:"
+    echo -e "  install     安装 vim-plug（默认命令）"
+    echo -e "  plugins     安装 vimrc 中声明的插件（:PlugInstall）"
+    echo -e "  uninstall   卸载 vim-plug 并移除配置块"
+    echo -e "  status      查看 plug.vim 与插件目录状态"
+    echo "-------------------------------------------------"
     echo -e "action        : ${ACTION}"
     echo -e "target        : vim=${TARGET_VIM} nvim=${TARGET_NVIM}"
     echo -e "with config   : ${WITH_CONFIG}"
@@ -432,6 +522,7 @@ ORIGINAL_ARGS=("$@")
 while [ $# -gt 0 ]; do
     case "$1" in
         install)        ACTION="install" ;;
+        plugins|pluginstall|plug) ACTION="plugins" ;;
         uninstall|remove) ACTION="uninstall" ;;
         status)         ACTION="status" ;;
         --vim)          TARGET_VIM=1 ;;
@@ -449,11 +540,18 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# 先探测可用的编辑器，避免菜单里 target 一律显示 0
+detect_targets
+
 do_echo_menu "${ORIGINAL_ARGS[@]}"
 
 case "${ACTION}" in
     install)
         do_install
+        ret=$?
+        ;;
+    plugins)
+        do_plug_install
         ret=$?
         ;;
     uninstall)
