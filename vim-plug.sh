@@ -858,66 +858,72 @@ do_echo_menu() {
 }
 
 # ========================================================
-# 参数解析
-ORIGINAL_ARGS=("$@")
-while [ $# -gt 0 ]; do
-    case "$1" in
-        install)        ACTION="install" ;;
-        config|conf)    ACTION="config" ;;
-        link|link-pack) ACTION="link" ;;
-        plugins|pluginstall|plug) ACTION="plugins" ;;
-        uninstall|remove) ACTION="uninstall" ;;
-        status)         ACTION="status" ;;
-        --vim)          TARGET_VIM=1 ;;
-        --nvim)         TARGET_NVIM=1 ;;
-        --with-config)  WITH_CONFIG=1 ;;
-        --mirror)       USE_MIRROR=1 ;;
-        --online)       USE_LOCAL_PLUG=0 ;;
-        --purge)        PURGE=1 ;;
-        -h|--help)      usage; exit 0 ;;
-        *)
-            error "unknown argument: $1"
-            usage
-            exit 1
-            ;;
+# 参数解析：结果写入全局变量 ACTION / TARGET_* / USE_* / *_CONFIG 等
+# 返回值:
+#   0  参数合法，继续执行
+#   1  参数非法（已打印用法），应以失败状态退出
+#   2  请求帮助（已打印用法），应以成功状态退出
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            install)                   ACTION="install" ;;
+            config|conf)               ACTION="config" ;;
+            link|link-pack)            ACTION="link" ;;
+            plugins|pluginstall|plug)  ACTION="plugins" ;;
+            uninstall|remove)          ACTION="uninstall" ;;
+            status)                    ACTION="status" ;;
+            --vim)                     TARGET_VIM=1 ;;
+            --nvim)                    TARGET_NVIM=1 ;;
+            --with-config)             WITH_CONFIG=1 ;;
+            --mirror)                  USE_MIRROR=1 ;;
+            --online)                  USE_LOCAL_PLUG=0 ;;
+            --purge)                   PURGE=1 ;;
+            -h|--help)                 usage; return 2 ;;
+            *)
+                error "unknown argument: $1"
+                usage
+                return 1
+                ;;
+        esac
+        shift
+    done
+    return 0
+}
+
+# ========================================================
+# 子命令分发：ACTION -> do_xxx 函数
+dispatch() {
+    case "${ACTION}" in
+        install)   do_install ;;
+        config)    do_config ;;
+        link)      do_link ;;
+        plugins)   do_plug_install ;;
+        uninstall) do_uninstall ;;
+        status)    show_status ;;
+        *)         usage; return 1 ;;
     esac
-    shift
-done
+}
 
-# 先探测可用的编辑器，避免菜单里 target 一律显示 0
-detect_targets
+# ========================================================
+# 主流程：解析参数 -> 探测目标编辑器 -> 打印菜单 -> 分发执行
+main() {
+    # 菜单要显示原始参数，先留一份；parse_args 在函数内 shift 不影响这里
+    ORIGINAL_ARGS=("$@")
 
-do_echo_menu "${ORIGINAL_ARGS[@]}"
+    parse_args "$@"
+    case $? in
+        0) ;;
+        2) exit 0 ;;
+        *) exit 1 ;;
+    esac
 
-case "${ACTION}" in
-    install)
-        do_install
-        ret=$?
-        ;;
-    config)
-        do_config
-        ret=$?
-        ;;
-    link)
-        do_link
-        ret=$?
-        ;;
-    plugins)
-        do_plug_install
-        ret=$?
-        ;;
-    uninstall)
-        do_uninstall
-        ret=$?
-        ;;
-    status)
-        show_status
-        ret=$?
-        ;;
-    *)
-        usage
-        ret=1
-        ;;
-esac
+    # 先探测可用的编辑器，避免菜单里 target 一律显示 0
+    detect_targets
 
-exit ${ret}
+    do_echo_menu "${ORIGINAL_ARGS[@]}"
+
+    dispatch
+}
+
+main "$@"
+exit $?
