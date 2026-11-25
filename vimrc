@@ -38,6 +38,27 @@ set showcmd
 " 左侧显示绝对行号；NERDTree 自己会 setlocal nonumber，不受影响
 set number
 
+" ---------------------------------------------------------------- 折叠
+" 按语法折叠 if/for/函数等块；C/C++/Java/Go/Shell/Vim script 的语法文件已内置 fold 区域
+set foldmethod=syntax
+" 启动时全部展开，需要时用 zc/za 手动收起
+set foldlevelstart=99
+" 左侧折叠列，鼠标点 +/- 也能开合
+set foldcolumn=2
+
+" Shell 与 Vim script 的语法折叠默认关闭，需要显式打开
+" sh：1=函数 2=heredoc 4=if/do/for；vim：a=augroup f=函数
+let g:sh_fold_enabled = 7
+let g:vimsyn_folding = 'af'
+
+" Python/TypeScript/JavaScript 的语法文件没有 fold 定义，退回按缩进折叠
+" foldmethod=indent 依赖 shiftwidth，这里按各语言常见缩进宽度设置
+augroup fold_fallback
+    autocmd!
+    autocmd FileType python setlocal foldmethod=indent foldlevel=99 shiftwidth=4
+    autocmd FileType typescript,javascript setlocal foldmethod=indent foldlevel=99 shiftwidth=2
+augroup END
+
 " ---------------------------------------------------------------- 快捷键
 " Ctrl+Z 撤销（默认是挂起到后台），与多数编辑器习惯一致；重做仍是 Ctrl+R
 nnoremap <C-z> u
