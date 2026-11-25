@@ -32,6 +32,21 @@ if has('mouse')
     set mouse=a
 endif
 
+" 右下角显示未完成的命令，例如 <Leader> 后等待输入、输入数字前缀时
+set showcmd
+
+" ---------------------------------------------------------------- 快捷键
+" Ctrl+Z 撤销（默认是挂起到后台），与多数编辑器习惯一致；重做仍是 Ctrl+R
+nnoremap <C-z> u
+inoremap <C-z> <C-o>u
+" 可视模式里 u 是转小写，先退出可视再撤销
+xnoremap <C-z> <Esc>u
+
+" Ctrl+S 保存；终端若把 Ctrl+S 当流控（界面卡住），在 shell 里执行 stty -ixon
+nnoremap <silent> <C-s> :write<CR>
+inoremap <silent> <C-s> <C-o>:write<CR>
+xnoremap <silent> <C-s> <Esc>:write<CR>
+
 " ---------------------------------------------------------------- 文件树
 let NERDTreeShowHidden = 1
 let NERDTreeWinSize    = 30
