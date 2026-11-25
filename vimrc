@@ -35,6 +35,9 @@ endif
 " 右下角显示未完成的命令，例如 <Leader> 后等待输入、输入数字前缀时
 set showcmd
 
+" 左侧显示绝对行号；NERDTree 自己会 setlocal nonumber，不受影响
+set number
+
 " ---------------------------------------------------------------- 快捷键
 " Ctrl+Z 撤销（默认是挂起到后台），与多数编辑器习惯一致；重做仍是 Ctrl+R
 nnoremap <C-z> u
