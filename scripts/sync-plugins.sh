@@ -82,7 +82,7 @@ parse_args() {
 }
 
 # ---------------------------------------------------------------- 同步动作
-# 目录目标：用 git archive 生成一份完整树，再整体替换，保证与上游无差异
+# 目录目标：复制上游完整工作树（排除 .git），再整体替换，保证与上游无差异
 sync_directory() {
     local up_repo="$1"
     local dst="$2"
@@ -91,7 +91,9 @@ sync_directory() {
     local stage="${WORK}/stage-${name}"
 
     mkdir -p "${stage}" || return 1
-    git -C "${up_repo}" archive HEAD | tar -x -C "${stage}" || return 1
+    # 不用 git archive：它会遵守上游 .gitattributes 的 export-ignore，
+    # 导致 README、CONTRIBUTING、.github 等文件被裁掉
+    tar -C "${up_repo}" --exclude=.git -cf - . | tar -x -C "${stage}" || return 1
 
     if [ -d "${dst}" ]; then
         mv "${dst}" "${WORK}/old-${name}" || return 1

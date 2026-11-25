@@ -2,4 +2,5 @@
 # name	repo	ref	commit	date	target
 nerdtree	https://github.com/preservim/nerdtree	master	690d061b591525890f1471c6675bcb5bdc8cdff9	2025-09-26	pack/vendor/start/nerdtree
 vim-airline	https://github.com/vim-airline/vim-airline	master	00f4a8fca9eca8c5dbdf182dd698364c75a71f71	2026-11-18	pack/vendor/start/vim-airline
+vim-fugitive	https://github.com/tpope/vim-fugitive	master	3b753cf8c6a4dcde6edee8827d464ba9b8c4a6f0	2026-03-07	pack/vendor/start/vim-fugitive
 vim-plug	https://github.com/junegunn/vim-plug	master	4c4e56b5f7384369927a075804b6a17de7644edd	2026-11-07	vendor/plug.vim

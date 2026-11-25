@@ -1,6 +1,6 @@
 # my-vim
 
-个人 Vim 配置仓库。内置 NERDTree、vim-airline 与 vim-plug，克隆后无需联网即可使用。
+个人 Vim 配置仓库。内置 NERDTree、vim-airline、vim-fugitive 与 vim-plug，克隆后无需联网即可使用。
 
 ## 快速开始
 
@@ -42,6 +42,7 @@ git pull                  # 拿到最新的 vimrc 模板与内置插件
 |---|---|---|---|---|
 | nerdtree | [nerdtree](https://github.com/preservim/nerdtree) | master | [`690d061`](https://github.com/preservim/nerdtree/commit/690d061b591525890f1471c6675bcb5bdc8cdff9) | 2025-09-26 |
 | vim-airline | [vim-airline](https://github.com/vim-airline/vim-airline) | master | [`00f4a8f`](https://github.com/vim-airline/vim-airline/commit/00f4a8fca9eca8c5dbdf182dd698364c75a71f71) | 2026-11-18 |
+| vim-fugitive | [vim-fugitive](https://github.com/tpope/vim-fugitive) | master | [`3b753cf`](https://github.com/tpope/vim-fugitive/commit/3b753cf8c6a4dcde6edee8827d464ba9b8c4a6f0) | 2026-03-07 |
 | vim-plug | [vim-plug](https://github.com/junegunn/vim-plug) | master | [`4c4e56b`](https://github.com/junegunn/vim-plug/commit/4c4e56b5f7384369927a075804b6a17de7644edd) | 2026-11-07 |
 <!-- END AUTOGEN:components -->
 
@@ -55,8 +56,9 @@ my-vim/
 ├── vim-plug.sh                   安装与卸载脚本
 ├── pack/
 │   ├── plugins.tsv               内置组件清单（上游地址、分支、提交）
-│   ├── vendor/start/nerdtree/    NERDTree 源码，与上游逐文件一致
-│   └── vendor/start/vim-airline/ vim-airline 源码，与上游逐文件一致
+│   ├── vendor/start/nerdtree/     NERDTree 源码，与上游逐文件一致
+│   ├── vendor/start/vim-airline/  vim-airline 源码，与上游逐文件一致
+│   └── vendor/start/vim-fugitive/ vim-fugitive 源码，与上游逐文件一致
 ├── vendor/plug.vim               vim-plug 本体（说明见 vendor/README.md）
 ├── scripts/
 │   ├── sync-plugins.sh           同步上游、回写清单并提交
