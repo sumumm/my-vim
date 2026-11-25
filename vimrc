@@ -25,6 +25,13 @@ if !empty(globpath(&runtimepath, 'autoload/plug.vim'))
     call plug#end()
 endif
 
+" ---------------------------------------------------------------- 基础设置
+" 终端鼠标：点击定位、可视选择、拖动窗口分隔线；VSCode 内置终端同样生效
+" 编译时未启用 +mouse 的版本自动跳过，避免报错
+if has('mouse')
+    set mouse=a
+endif
+
 " ---------------------------------------------------------------- 文件树
 let NERDTreeShowHidden = 1
 let NERDTreeWinSize    = 30
